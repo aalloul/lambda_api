@@ -1,0 +1,13 @@
+{
+  "headers":{
+    "deviceID":"146b3a6d-db1a-4d25-a06d-eabf7aeb9644",
+    "deviceType":"p1"
+  },
+  "body":[
+    {"fragActions":{"action":"reg_later","fragStart":1487618283469,"fragDuration":14765,"fragEnd":1487618298234},"activity_start":1487618284638,"fragName":"registration","sID":1487618283288,"activity_name":"mainActivity"},
+    {"fragActions":{"action":"bewrwe23w","fragStart":1487618283469,"fragDuration":14865,"fragEnd":1487618298534},"activity_start":1487618285638,"fragName":"registration","sID":1487611283188,"activity_name":"retkowerwrwn"},
+    {"fragActions":{"action":"atwweweer","fragStart":1487618383469,"fragDuration":14965,"fragEnd":1487618298634},"activity_start":1487618286638,"fragName":"registration","sID":1487613283588,"activity_name":"werwdfwfregr"},
+    {"fragActions":{"action":"we23232de","fragStart":1487618483469,"fragDuration":14065,"fragEnd":1487618298734},"activity_start":1487618287638,"fragName":"registration","sID":1487614283688,"activity_name":"bdknowwmwer2"},
+    {"fragActions":{"action":"rewewwer2","fragStart":1487618583469,"fragDuration":14365,"fragEnd":1487618298834},"activity_start":1487618289638,"fragName":"registration","sID":1487615283788,"activity_name":"werimo2plwerm"}
+  ]
+}
