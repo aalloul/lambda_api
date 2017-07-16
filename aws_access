@@ -1,0 +1,16 @@
+
+
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::590746499688:root"
+      },
+      "Action": "es:*",
+      "Resource": "arn:aws:es:eu-west-1:590746499688:domain/shippy-es/*"
+    }
+  ]
+}
