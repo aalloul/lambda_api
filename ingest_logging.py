@@ -29,6 +29,7 @@ class ElasticsearchSink:
 
         # Logging
         self.loglevel = logging.DEBUG
+        logging.basicConfig()
         self.logger = logging.getLogger()
         self.logger.setLevel(self.loglevel)
 
