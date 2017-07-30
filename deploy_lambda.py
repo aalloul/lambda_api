@@ -8,7 +8,7 @@ class AWSSinnk:
     """
     Class to streamline the creation of deployment packages towards AWS
     """
-    def __init__(self, lambda_file_name, handler_function, dependencies=None):
+    def __init__(self, lambda_file_name, handler_function, dependencies):
 
         # Logging
         self.loglevel = logging.DEBUG

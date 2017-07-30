@@ -14,10 +14,12 @@ class ElasticsearchSink:
         It serves also as a data buffer and an interface to the
         bulk API.
     """
+
     def __init__(self):
-        # Moved to month based to reduce the number of indices
-        self.today = datetime.strftime(datetime.today(), "%Y-%m")
-        self.indexName = "logging-{}-{}"
+        # Reduced to yearly based to reduce the explosion of indices while we have
+        # a ver small number of offers
+        self.today = datetime.strftime(datetime.today(), "%Y")
+        self.indexName = "offers-{}-{}"
         self.docType = "tests"
         self.theport = 80
         self.ACCESS_KEY = "AKIAIAOZRRLDX37HKW4Q"
@@ -76,8 +78,30 @@ class ElasticsearchSink:
             tobulkindex.append(ev)
 
         successes, errors = helpers.bulk(self.es, tobulkindex)
-        self.logger.debug("Successful bulk operations {}".format(successes))
+        self.logger.info("Successful bulk operations {}".format(successes))
         self.logger.error("Non successful bulk operations {}".format(errors))
+
+    def index(self):
+        self.logger.info("Indexing {} events".format(len(self.data_buffer)))
+        self.logger.debug("The events are following")
+        self.logger.debug(dumps(self.data_buffer))
+
+        successes = 0
+        errors = 0
+
+        for ev in self.data_buffer:
+            index_res = self.es.index(index=self.__get_index_name(ev["offerVersion"]),
+                                      doc_type=self.docType,
+                                      body=ev)
+            if "acknowledged" in index_res and index_res['acknowledged']:
+                successes += 1
+            elif "result" in index_res and index_res['result'] == "created":
+                successes += 1
+            else:
+                errors += 1
+
+        self.logger.info("Successful indexing operations {}/{}".format(successes, len(self.data_buffer)))
+        self.logger.error("Non successful bulk operations {}/{}".format(errors, len(self.data_buffer)))
 
 
 class Enricher:
@@ -87,13 +111,15 @@ class Enricher:
     It is initialized using by passing in the event variable
     that is passed onto the handler function.
     """
+
     def __init__(self, event):
         self.devId = event['params']['header']['deviceID']
         self.devType = event['params']['header']['deviceType']
-        if 'dataModelVersion' in event['params']['header']:
-            self.dataModelVersion = float(event['params']['header']['dataModelVersion'])
+
+        if 'offerVersion' in event['params']['header']:
+            self.offerVersion = float(event['params']['header']['offerVersion'])
         else:
-            self.dataModelVersion = None
+            self.offerVersion = None
 
         self.country = event['params']['header']["CloudFront-Viewer-Country"]
         self.isTablet = event['params']['header']["CloudFront-Is-Tablet-Viewer"]
@@ -104,42 +130,69 @@ class Enricher:
         self.requestArrived = int(time() * 1000)
         self.requestFlightTime = self.requestArrived - self.requestTime
 
-        self.events = event['body-json']
+        self.event = event['body-json']
 
-    def __enrich_event(self, event):
+    def __add_headers(self, ev):
+        """
+        Adds the headers to the event's body
+        :param ev: The event as received by the API
+        :return: An enriched version of the event
+        """
+        ev['requestTime'] = self.requestTime
+        ev['requestArrived'] = self.requestArrived
+        ev['requestFlightTime'] = self.requestFlightTime
+        ev['deviceID'] = self.devId
+        ev['deviceType'] = self.devType
+        ev['request_country'] = self.country
+        ev['isTablet'] = self.isTablet
+        ev['isMobile'] = self.isMobile
+        ev['isDesktop'] = self.isDesktop
+        # The dataModelVersion is sent as a String by the App. We convert it to a
+        # float as it has to be a float
+        ev['offerVersion'] = self.offerVersion
+
+        return ev
+
+    def __generateGeoPoint(self, ev):
+        """
+        Create Geo-Point object and drop redundant fields
+        :param ev: Dictionary that should contain the keys
+            DropoffLongitude, DropoffLatitude, PickupLongitude, PickupLatitude
+        :return: the event with geo-points (nested objects) DropoffLatlong and PickupLatLng.
+                 the original keys (*Longitude and *Latitude) are popped.
+        """
+        ev['DropoffLatlong'] = {"lon": ev['DropoffLongitude'], "lat": ev['DropoffLatitude']}
+        ev['PickupLatLng'] = {"lon": ev['PickupLongitude'], "lat": ev['PickupLatitude']}
+        ev.pop("DropoffLongitude")
+        ev.pop("DropoffLatitude")
+        ev.pop("PickupLongitude")
+        ev.pop("PickupLatitude")
+
+        return ev
+
+    def __enrich_event(self, ev):
         """
         This method is called for each event.
-        :param event: Single event contained in the body-json of the "event"
+        :param ev: Single event contained in the body-json of the "event"
         parameter of the handler function.
         :return: a dictionary representing the event + the extra meta data
         """
 
-        event['requestTime'] = self.requestTime
-        event['requestArrived'] = self.requestArrived
-        event['requestFlightTime'] = self.requestFlightTime
-        event['deviceID'] = self.devId
-        event['deviceType'] = self.devType
-        event['request_country'] = self.country
-        event['isTablet'] = self.isTablet
-        event['isMobile'] = self.isMobile
-        event['isDesktop'] = self.isDesktop
-        # The dataModelVersion is sent as a String by the App. We convert it to a
-        # float as it has to be a float
-        event['dataModelVersion'] = self.dataModelVersion
+        myev = self.__generateGeoPoint(ev)
+        myev = self.__add_headers(myev)
 
-        return event
+        return myev
 
     def enrich_events(self):
         """
         This method operates on a list of dictionaries. It simply calls
         :meth: __enrich_event for each event that is passed.
-        :param list_events: This is the list of events as transferred by the API.
         :return: A list of events, where each was enriched with meta-data
         """
-        return [self.__enrich_event(event) for event in self.events]
+        return [self.__enrich_event(event) for event in self.event]
 
 
-def ingest_logging(event, context):
+def ingest_offer(event, context):
     """
     Handler function called by the Lambda interface.
     :param event: contains the event data received by the API.
@@ -150,11 +203,12 @@ def ingest_logging(event, context):
 
     enricher = Enricher(event)
 
-    if enricher.dataModelVersion is None or enricher.dataModelVersion != 0.1:
+    if enricher.offerVersion is None or enricher.offerVersion != 0.1:
         return None
 
     es_sink = ElasticsearchSink()
 
     es_sink.add_data(enricher.enrich_events())
 
-    es_sink.bulk_index()
+    # es_sink.bulk_index()
+    es_sink.index()
